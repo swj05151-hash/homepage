@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OX 퀴즈 교실</title>
+<style>
+:root{--bg:#eef3f2;--c:#fff;--t:#14262b;--m:#5d7176;--p:#0f766e;--g:#15803d;--r:#c2410c;--b:#d5e0de}
+@media(prefers-color-scheme:dark){:root{--bg:#0e1a1c;--c:#16262a;--t:#e6f0ee;--m:#8fa6a9;--p:#2dd4bf;--b:#27393d}button.pri,button.on{color:#04211e!important}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--t);font:16px/1.55 "Pretendard","Noto Sans KR",system-ui,sans-serif}
+header{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 16px;background:var(--c);border-bottom:1px solid var(--b)}
+h1{font-size:1.15rem;margin:0}h2{margin:0 0 8px;font-size:1.2rem}h3{margin:8px 0}
+main{max-width:760px;margin:0 auto;padding:16px}
+.card{background:var(--c);border:1px solid var(--b);border-radius:10px;padding:16px;margin-bottom:12px}
+input,select,textarea{width:100%;padding:10px;margin:4px 0 8px;border:1px solid var(--b);border-radius:8px;background:var(--bg);color:var(--t);font:inherit}
+button{padding:9px 14px;border:1px solid var(--b);border-radius:8px;background:var(--c);color:var(--t);font:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--p);outline-offset:2px}
+button.pri,button.on{background:var(--p);color:#fff;border-color:var(--p)}
+button:disabled{opacity:.5;cursor:default}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.ox{display:flex;gap:12px;margin:12px 0}.ox button{flex:1;font-size:2.6rem;padding:18px}
+.ok{color:var(--g)}.no{color:var(--r)}.m{color:var(--m);font-size:.88rem}
+table{width:100%;border-collapse:collapse}td,th{padding:8px;border-bottom:1px solid var(--b);text-align:left}
+.bar{height:7px;background:var(--b);border-radius:4px;margin-top:4px}.bar i{display:block;height:100%;background:var(--p);border-radius:4px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.item{padding:8px 0;border-bottom:1px solid var(--b)}
+</style>
+</head>
+<body>
+<header><h1>OX 퀴즈 교실</h1><nav class="row"><button id="bS">학생</button><button id="bT">선생님</button></nav></header>
+<main id="app"></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+// ▼ Supabase > Project Settings > API 에서 복사해 붙여넣으세요
+const CFG={url:'https://rmljlweharmzlrpvqluw.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJtbGpsd2VoYXJtemxycHZxbHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU0NjU2NDMsImV4cCI6MjExMTA0MTY0M30.j3i9PhOyj1UFZRmg60DFMed_QdNtVqDTaxS-3z_jx7s'};
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=d=>new Date(d).toLocaleString('ko-KR');
+const tabs=(a,cur)=>a.map(([k,l])=>`<button data-k="${k}" class="${k==cur?'on':''}">${l}</button>`).join('');
+const bindTabs=f=>document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>f(b.dataset.k));
+const app=$('#app');
+let sb,mode='s',tab='quiz',ttab='quizzes',me=null;
+try{me=JSON.parse(localStorage.getItem('me'))}catch(e){}
+
+function render(){
+  $('#bS').className=mode=='s'?'on':'';$('#bT').className=mode=='t'?'on':'';
+  if(CFG.url.includes('YOUR-')){app.innerHTML='<div class="card">index.html 위쪽의 <b>CFG</b>에 Supabase 주소(url)와 anon key를 입력하세요.</div>';return}
+  mode=='s'?stu():tea();
+}
+$('#bS').onclick=()=>{mode='s';render()};
+$('#bT').onclick=()=>{mode='t';render()};
+
+/* ───────── 학생 ───────── */
+function stu(){
+  if(!me){
+    app.innerHTML=`<div class="card"><h2>입장하기</h2><input id="sid" placeholder="학번" inputmode="numeric"><input id="snm" placeholder="이름"><button class="pri" id="go">퀴즈 시작</button></div>`;
+    $('#go').onclick=()=>{
+      const id=$('#sid').value.trim(),name=$('#snm').value.trim();
+      if(!id||!name)return alert('학번과 이름을 입력하세요.');
+      me={id,name};try{localStorage.setItem('me',JSON.stringify(me))}catch(e){}
+      render();
+    };
+    return;
+  }
+  app.innerHTML=`<div class="card row"><b>${esc(me.id)} ${esc(me.name)}</b><button id="out">다른 학생으로 입장</button></div>
+  <div class="tabs">${tabs([['quiz','퀴즈 풀기'],['make','문제 만들기'],['ask','질문하기']],tab)}</div><div id="pane"></div>`;
+  $('#out').onclick=()=>{me=null;try{localStorage.removeItem('me')}catch(e){}render()};
+  bindTabs(k=>{tab=k;stu()});
+  ({quiz,make,ask})[tab]();
+}
+
+async function quiz(){
+  const p=$('#pane');p.innerHTML='불러오는 중…';
+  const{data,error}=await sb.from('quizzes').select('id,question,answer').eq('is_active',true).order('id');
+  if(error)return p.innerHTML='오류: '+esc(error.message);
+  if(!data.length)return p.innerHTML='<div class="card">선생님이 보낸 퀴즈가 아직 없어요.</div>';
+  let i=0,s=0;
+  const show=()=>{
+    if(i>=data.length){
+      p.innerHTML=`<div class="card"><h2>끝났어요!</h2><p>${data.length}문제 중 <b>${s}문제</b> 정답</p><button class="pri" id="re">다시 풀기</button></div>`;
+      $('#re').onclick=quiz;return;
+    }
+    p.innerHTML=`<div class="card"><div class="m">${i+1} / ${data.length}</div><h2>${esc(data[i].question)}</h2>
+      <div class="ox"><button data-v="1" aria-label="O">⭕</button><button data-v="0" aria-label="X">❌</button></div><div id="fb"></div></div>`;
+    p.querySelectorAll('.ox button').forEach(b=>b.onclick=async()=>{
+      p.querySelectorAll('.ox button').forEach(x=>x.disabled=true);
+      const ok=(b.dataset.v==1)===data[i].answer;if(ok)s++;
+      const{error}=await sb.from('attempts').insert({student_id:me.id,student_name:me.name,quiz_id:data[i].id,correct:ok});
+      $('#fb').innerHTML=`<h3 class="${ok?'ok':'no'}">${ok?'정답입니다!':'틀렸어요. 정답은 '+(data[i].answer?'⭕':'❌')}</h3>${error?'<p class="m">기록 저장에 실패했어요.</p>':''}<button class="pri" id="nx">${i+1<data.length?'다음 문제':'결과 보기'}</button>`;
+      $('#nx').onclick=()=>{i++;show()};
+    });
+  };
+  show();
+}
+
+function make(){
+  $('#pane').innerHTML=`<div class="card"><h2>문제 만들어 제출하기</h2>
+    <select id="ty"><option value="OX">OX 문제</option><option value="short">단답형 문제</option></select>
+    <textarea id="mq" rows="3" placeholder="문제를 입력하세요"></textarea><div id="ma"></div>
+    <button class="pri" id="sub">제출하기</button><p id="r"></p></div>`;
+  const ans=()=>$('#ma').innerHTML=$('#ty').value=='OX'?'<select id="av"><option>O</option><option>X</option></select>':'<input id="av" placeholder="정답을 입력하세요">';
+  ans();$('#ty').onchange=ans;
+  $('#sub').onclick=async()=>{
+    const q=$('#mq').value.trim(),a=$('#av').value.trim();
+    if(!q||!a)return alert('문제와 정답을 모두 입력하세요.');
+    const{error}=await sb.from('student_quizzes').insert({student_id:me.id,student_name:me.name,type:$('#ty').value,question:q,answer:a});
+    $('#r').innerHTML=error?'오류: '+esc(error.message):`제출했어요! 내가 정한 정답: <b>${esc(a)}</b>`;
+    if(!error)$('#mq').value='';
+  };
+}
+
+function ask(){
+  $('#pane').innerHTML=`<div class="card"><h2>선생님께 질문하기</h2><textarea id="qb" rows="4" placeholder="궁금한 점을 적어주세요"></textarea><button class="pri" id="sq">질문 보내기</button><p id="r"></p></div>`;
+  $('#sq').onclick=async()=>{
+    const b=$('#qb').value.trim();if(!b)return;
+    const{error}=await sb.from('questions').insert({student_id:me.id,student_name:me.name,body:b});
+    $('#r').textContent=error?'오류: '+error.message:'질문을 보냈어요.';
+    if(!error)$('#qb').value='';
+  };
+}
+
+/* ───────── 선생님 ───────── */
+async function tea(){
+  const{data:{session}}=await sb.auth.getSession();
+  if(!session){
+    app.innerHTML=`<div class="card"><h2>선생님 로그인</h2><input id="em" type="email" placeholder="이메일"><input id="pw" type="password" placeholder="비밀번호"><button class="pri" id="li">로그인</button></div>`;
+    $('#li').onclick=async()=>{
+      const{error}=await sb.auth.signInWithPassword({email:$('#em').value.trim(),password:$('#pw').value});
+      error?alert('로그인 실패: '+error.message):tea();
+    };
+    return;
+  }
+  app.innerHTML=`<div class="card row"><span class="m">${esc(session.user.email)}</span><button id="lo">로그아웃</button></div>
+  <div class="tabs">${tabs([['quizzes','OX 문제'],['stats','정답률'],['qs','학생 질문'],['made','학생 출제 문제']],ttab)}</div><div id="pane"></div>`;
+  $('#lo').onclick=async()=>{await sb.auth.signOut();tea()};
+  bindTabs(k=>{ttab=k;tea()});
+  ({quizzes:tQuizzes,stats:tStats,qs:tQs,made:tMade})[ttab]();
+}
+
+async function tQuizzes(){
+  const p=$('#pane');
+  p.innerHTML=`<div class="card"><h3>문제 추가</h3>
+    <input id="nu" list="ul" placeholder="단원/진도 (예: 3단원 2차시)"><datalist id="ul"></datalist>
+    <textarea id="nq" rows="2" placeholder="OX 문제"></textarea>
+    <select id="na"><option>O</option><option>X</option></select><button class="pri" id="add">추가</button>
+    <h3>여러 개 한 번에 업로드</h3><p class="m">위에 적은 단원 이름으로 모두 저장돼요. 한 줄에 하나씩 <code>문제,O</code> 형식 (CSV·TXT 파일 또는 붙여넣기)</p>
+    <input type="file" id="fi" accept=".csv,.txt"><textarea id="bulk" rows="4"></textarea><button id="bk">일괄 업로드</button></div>
+    <div id="list"></div>`;
+  const list=$('#list');
+  const load=async()=>{
+    const{data,error}=await sb.from('quizzes').select('*').order('id');
+    if(error)return alert(error.message);
+    const g={};data.forEach(q=>(g[q.unit||'(단원 없음)']??=[]).push(q));
+    const ents=Object.entries(g);
+    $('#ul').innerHTML=ents.map(([u])=>`<option value="${esc(u)}">`).join('');
+    list.innerHTML=data.length?`<div class="card row"><span>지금 학생에게 전송 중: <b>${data.filter(q=>q.is_active).length}문제</b></span><button id="off">전체 해제</button></div>`+
+      ents.map(([u,a],gi)=>`<div class="card"><div class="row"><h3 style="margin:0">${esc(u)} <span class="m">${a.filter(q=>q.is_active).length}/${a.length} 전송 중</span></h3><div class="row"><button class="pri" data-gi="${gi}" data-v="1">이 단원 전송</button><button data-gi="${gi}" data-v="0">해제</button></div></div>
+      ${a.map(q=>`<div class="item row"><div>${q.answer?'⭕':'❌'} ${esc(q.question)}</div><div class="row"><label><input type="checkbox" style="width:auto;margin:0" data-id="${q.id}" ${q.is_active?'checked':''}> 전송</label><button data-del="${q.id}">삭제</button></div></div>`).join('')}</div>`).join(''):'<div class="card">등록된 문제가 없어요. 위에서 추가하세요.</div>';
+    list.querySelectorAll('[data-gi]').forEach(b=>b.onclick=async()=>{
+      const{error}=await sb.from('quizzes').update({is_active:b.dataset.v=='1'}).in('id',ents[b.dataset.gi][1].map(q=>q.id));
+      error?alert(error.message):load();
+    });
+    const off=$('#off');if(off)off.onclick=async()=>{await sb.from('quizzes').update({is_active:false}).eq('is_active',true);load()};
+    list.querySelectorAll('[data-id]').forEach(c=>c.onchange=async()=>{
+      const{error}=await sb.from('quizzes').update({is_active:c.checked}).eq('id',c.dataset.id);error?alert(error.message):load();
+    });
+    list.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
+      if(confirm('삭제할까요? 이 문제의 풀이 기록도 함께 삭제됩니다.')){await sb.from('quizzes').delete().eq('id',b.dataset.del);load()}
+    });
+  };
+  $('#add').onclick=async()=>{
+    const q=$('#nq').value.trim();if(!q)return;
+    const{error}=await sb.from('quizzes').insert({question:q,answer:$('#na').value=='O',unit:$('#nu').value.trim()});
+    if(error)return alert(error.message);$('#nq').value='';load();
+  };
+  $('#fi').onchange=async e=>{$('#bulk').value=await e.target.files[0].text()};
+  $('#bk').onclick=async()=>{
+    const unit=$('#nu').value.trim();
+    const rows=$('#bulk').value.split('\n').map(l=>l.trim().match(/^(.+)[,\t]\s*"?([OoXx])"?$/)).filter(Boolean)
+      .map(m=>({unit,question:m[1].replace(/^\uFEFF/,'').replace(/^"|"$/g,''),answer:m[2].toUpperCase()=='O'}));
+    if(!rows.length)return alert('형식에 맞는 줄이 없어요. 예) 지구는 둥글다,O');
+    const{error}=await sb.from('quizzes').insert(rows);
+    if(error)return alert(error.message);
+    $('#bulk').value='';alert(rows.length+'개를 업로드했어요.');load();
+  };
+  load();
+}
+
+async function tStats(){
+  const p=$('#pane');
+  const{data,error}=await sb.from('student_stats').select('*');
+  if(error)return p.textContent=error.message;
+  p.innerHTML=`<div class="card"><div class="m">학생을 누르면 풀이 기록을 볼 수 있어요.</div><table><tr><th>학번</th><th>이름</th><th>푼 문제</th><th>정답</th><th>누적 정답률</th></tr>${
+    data.map(s=>`<tr data-s="${esc(s.student_id)}" style="cursor:pointer"><td>${esc(s.student_id)}</td><td>${esc(s.student_name)}</td><td>${s.total}</td><td>${s.correct}</td><td>${s.rate}%<div class="bar"><i style="width:${s.rate}%"></i></div></td></tr>`).join('')||'<tr><td colspan="5">아직 풀이 기록이 없어요.</td></tr>'}</table></div><div id="dt"></div>`;
+  p.querySelectorAll('tr[data-s]').forEach(r=>r.onclick=async()=>{
+    const{data}=await sb.from('attempts').select('correct,created_at,quizzes(question)').eq('student_id',r.dataset.s).order('created_at',{ascending:false}).limit(100);
+    $('#dt').innerHTML=`<div class="card"><h3>${esc(r.dataset.s)} 풀이 기록 (최근 100개)</h3>${(data||[]).map(a=>`<div class="item"><span class="${a.correct?'ok':'no'}">${a.correct?'정답':'오답'}</span> ${esc(a.quizzes?.question)} <span class="m">${fmt(a.created_at)}</span></div>`).join('')}</div>`;
+  });
+}
+
+async function tQs(){
+  const p=$('#pane');
+  const{data,error}=await sb.from('questions').select('*').order('created_at',{ascending:false});
+  if(error)return p.textContent=error.message;
+  const ids=[...new Map(data.map(q=>[q.student_id,q.student_name]))];
+  p.innerHTML=`<select id="f"><option value="">전체 학생 (${data.length}개)</option>${ids.map(([i,n])=>`<option value="${esc(i)}">${esc(i)} ${esc(n)}</option>`).join('')}</select><div id="ql"></div>`;
+  const show=()=>{
+    const v=$('#f').value;
+    $('#ql').innerHTML=data.filter(q=>!v||q.student_id==v).map(q=>`<div class="card"><div class="m">${esc(q.student_id)} ${esc(q.student_name)} · ${fmt(q.created_at)}</div>${esc(q.body)}</div>`).join('')||'<div class="card">받은 질문이 없어요.</div>';
+  };
+  $('#f').onchange=show;show();
+}
+
+async function tMade(){
+  const p=$('#pane');
+  const{data,error}=await sb.from('student_quizzes').select('*').order('created_at',{ascending:false});
+  if(error)return p.textContent=error.message;
+  p.innerHTML=data.map(q=>`<div class="card"><div class="m">${esc(q.student_id)} ${esc(q.student_name)} · ${q.type=='OX'?'OX':'단답형'} · ${fmt(q.created_at)}</div><b>${esc(q.question)}</b><div>정답: ${esc(q.answer)}</div><div class="row" style="justify-content:flex-start;margin-top:6px">${q.type=='OX'?`<button data-add="${q.id}">퀴즈 목록에 추가</button>`:''}<button data-del="${q.id}">삭제</button></div></div>`).join('')||'<div class="card">학생이 낸 문제가 아직 없어요.</div>';
+  p.querySelectorAll('[data-add]').forEach(b=>b.onclick=async()=>{
+    const q=data.find(x=>x.id==b.dataset.add);
+    const{error}=await sb.from('quizzes').insert({unit:'학생 출제',question:q.question,answer:q.answer.toUpperCase()=='O'});
+    alert(error?error.message:'OX 문제 탭의 목록에 추가했어요.');
+  });
+  p.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{await sb.from('student_quizzes').delete().eq('id',b.dataset.del);tMade()});
+}
+
+if(!CFG.url.includes('YOUR-'))sb=supabase.createClient(CFG.url,CFG.key);
+render();
+</script>
+</body>
+</html>
